@@ -119,6 +119,34 @@ def send_email(to_email, subject, body):
         return False, str(exc)
 
 
+
+def send_high_alert_in_background(user_id, date, to_email, username, score, label, tip):
+    sent, message = send_email(
+        to_email,
+        "High Stress Alert - Personal Stress Tracker",
+        high_stress_email_body(username, date, score, label, tip),
+    )
+    predictions_col.update_one(
+        {"user_id": user_id, "date": date},
+        {"$set": {
+            "high_alert_email_sent": sent,
+            "high_alert_email_message": message,
+            "high_alert_email_checked_at": datetime.utcnow(),
+        }},
+    )
+
+
+def queue_high_alert_email(user_id, date, to_email, username, score, label, tip):
+    if label != "High":
+        return False, "Not needed for this label"
+    thread = threading.Thread(
+        target=send_high_alert_in_background,
+        args=(user_id, date, to_email, username, score, label, tip),
+        daemon=True,
+    )
+    thread.start()
+    return False, "High stress alert queued. Email will be sent shortly."
+
 def high_stress_email_body(username, date, score, label, tip):
     return f"""Hi {username},
 
@@ -622,17 +650,12 @@ def predict():
     }
 
     email_sent = False
-    email_message = ""
+    email_message = "Not needed for this label"
+    user = current_user()
+    to_email = user.get("email") if user else session.get("email")
     if label == "High":
-        user = current_user()
-        to_email = user.get("email") if user else session.get("email")
-        email_sent, email_message = send_email(
-            to_email,
-            "High Stress Alert - Personal Stress Tracker",
-            high_stress_email_body(session.get("username", "there"), date, score, label, tip),
-        )
-        record["high_alert_email_sent"] = email_sent
-        record["high_alert_email_message"] = email_message
+        record["high_alert_email_sent"] = False
+        record["high_alert_email_message"] = "High stress alert queued. Email will be sent shortly."
 
     try:
         predictions_col.insert_one(record)
@@ -642,6 +665,17 @@ def predict():
             "already_submitted": True,
             "date": date,
         }), 409
+
+    if label == "High":
+        email_sent, email_message = queue_high_alert_email(
+            session.get("user_id"),
+            date,
+            to_email,
+            session.get("username", "there"),
+            score,
+            label,
+            tip,
+        )
 
     return jsonify({
         "stress_score": score,
