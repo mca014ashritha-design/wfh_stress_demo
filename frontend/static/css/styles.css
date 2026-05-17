@@ -745,6 +745,37 @@ th {
 }
 
 /* Enhanced daily check-in UI */
+
+.input-only-container {
+  display: block;
+  max-width: 980px;
+}
+
+.input-only-container .checkin-card {
+  width: 100%;
+}
+
+.result-page-container {
+  display: flex;
+  justify-content: center;
+  max-width: 780px;
+}
+
+.result-output-card {
+  position: static;
+  width: 100%;
+}
+
+.result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.result-actions .secondary-link {
+  margin-top: 0;
+}
 .enhanced-container {
   grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.75fr);
 }

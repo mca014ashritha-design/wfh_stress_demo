@@ -6,7 +6,6 @@ const datePretty = document.getElementById("datePretty");
 const submitBtn = document.getElementById("submitBtn");
 const submissionBanner = document.getElementById("submissionBanner");
 const toast = document.getElementById("toast");
-const gaugeNeedle = document.getElementById("gaugeNeedle");
 const weekdayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 function showToast(message, type = "info") {
@@ -87,46 +86,25 @@ function formToPayload() {
   return payload;
 }
 
-function updateGauge(score, color) {
-  const pct = Math.max(0, Math.min(100, ((Number(score) - 1) / 9) * 100));
-  gaugeNeedle.style.left = `${pct}%`;
-  gaugeNeedle.style.background = color || "#2563eb";
+function openResultPage(data) {
+  sessionStorage.setItem("latestPrediction", JSON.stringify(data));
+  window.location.href = "/result";
 }
 
-function renderPrediction(data) {
-  document.getElementById("scoreValue").textContent = Number(data.stress_score).toFixed(3);
-  document.getElementById("labelValue").textContent = data.stress_label;
-  document.getElementById("labelValue").style.color = data.color;
-  document.getElementById("scoreBox").style.borderLeftColor = data.color;
-  document.getElementById("tipValue").textContent = data.tip;
-  document.getElementById("driverValue").textContent = data.tip_driver;
-  document.getElementById("savedValue").textContent = data.saved ? "Yes" : "No";
-  updateGauge(data.stress_score, data.color);
-
-  const emailValue = document.getElementById("emailValue");
-  if (data.stress_label === "High") {
-    emailValue.textContent = data.email_sent ? "High alert sent" : `Not sent: ${data.email_message || "email not configured"}`;
-    emailValue.className = data.email_sent ? "ok-text" : "warn-text";
-  } else {
-    emailValue.textContent = "Not needed for this label";
-    emailValue.className = "";
-  }
-}
-
-function renderExisting(data) {
-  if (!data.stress_score) return;
+function existingToResult(data) {
   const labelColors = { Low: "#27AE60", Moderate: "#E67E22", High: "#C0392B" };
-  const color = labelColors[data.stress_label] || "#2563eb";
-  renderPrediction({
+  return {
     stress_score: data.stress_score,
     stress_label: data.stress_label,
-    color,
+    color: labelColors[data.stress_label] || "#2563eb",
     tip: data.tip || "This check-in is already saved.",
     tip_driver: data.tip_driver || "saved_record",
     saved: true,
     email_sent: false,
-    email_message: "",
-  });
+    email_message: "Already saved record",
+    date: data.date,
+    already_submitted: true,
+  };
 }
 
 const today = new Date();
@@ -157,17 +135,15 @@ form.addEventListener("submit", async (event) => {
     const data = await response.json();
     if (!response.ok) {
       if (response.status === 409 && data.already_submitted) {
-        renderExisting(data);
         setBanner(true, data);
-        showToast("You already submitted for this date.", "warn");
+        openResultPage(existingToResult(data));
         return;
       }
       throw new Error(data.error || "Prediction failed");
     }
 
-    renderPrediction(data);
     setBanner(true, data);
-    showToast("Check-in saved successfully.", "ok");
+    openResultPage(data);
   } catch (error) {
     document.getElementById("errorBox").textContent = error.message;
     showToast(error.message, "warn");

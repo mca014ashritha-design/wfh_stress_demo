@@ -518,6 +518,18 @@ def index():
     )
 
 
+
+@app.route("/result")
+@login_required
+def result():
+    return render_template(
+        "result.html",
+        low_t=LOW_T,
+        mod_t=MOD_T,
+        username=session.get("username"),
+        employee_id=current_employee_id(),
+    )
+
 @app.route("/dashboard")
 @login_required
 def dashboard():

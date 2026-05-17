@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Stress Result | Personal Stress Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+  <header class="topbar app-topbar">
+    <div class="brand-block">
+      <strong>Personal Stress Tracker</strong>
+      <span>{{ username }}</span>
+    </div>
+    <nav class="nav-links">
+      <a href="{{ url_for('index') }}">Stress Input</a>
+      <a class="active" href="{{ url_for('result') }}">Result</a>
+      <a href="{{ url_for('dashboard') }}">Dashboard</a>
+      <a href="{{ url_for('logout') }}">Logout</a>
+    </nav>
+  </header>
+
+  <main class="container result-page-container">
+    <section class="card result result-card enhanced-result-card result-output-card">
+      <p class="eyebrow">Prediction Output</p>
+      <h1>Your Stress Result</h1>
+      <p class="muted" id="resultDateText">Review your saved daily prediction.</p>
+
+      <div class="stress-gauge" id="stressGauge">
+        <div class="gauge-track">
+          <span></span>
+          <span></span>
+          <span></span>
+          <i id="gaugeNeedle"></i>
+        </div>
+        <div class="gauge-labels">
+          <span>Low</span><span>Moderate</span><span>High</span>
+        </div>
+      </div>
+
+      <div class="score" id="scoreBox">
+        <span>Stress Score</span>
+        <strong id="scoreValue">--</strong>
+        <b id="labelValue">Waiting</b>
+      </div>
+
+      <div class="tip-panel">
+        <h3>Health Tip</h3>
+        <p id="tipValue">Your tip will appear here.</p>
+      </div>
+
+      <p class="support-note">If your stress is high for several days, consider taking rest, talking to someone you trust, or consulting a qualified healthcare professional.</p>
+      <p class="disclaimer result-disclaimer">The predicted stress score is for informational purposes only and not a clinical diagnosis. Please consult a healthcare professional for medical advice.</p>
+
+      <div class="result-meta">
+        <p><b>Tip Driver</b><span id="driverValue">--</span></p>
+        <p><b>Saved to MongoDB</b><span id="savedValue">--</span></p>
+        <p><b>Email Alert</b><span id="emailValue">Only for High stress</span></p>
+        <p><b>Thresholds</b><span>Low <= {{ low_t }} | Moderate <= {{ mod_t }}</span></p>
+      </div>
+
+      <div class="result-actions">
+        <a class="secondary-link" href="{{ url_for('index') }}">Enter Another Date</a>
+        <a class="secondary-link" href="{{ url_for('dashboard') }}">View Dashboard</a>
+      </div>
+      <p class="error" id="errorBox"></p>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='js/result.js') }}"></script>
+</body>
+</html>
