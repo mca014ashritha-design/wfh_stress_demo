@@ -7,12 +7,6 @@ pipeline {
     }
 
     stages {
-        stage('Checkout') {
-            steps {
-                git branch: 'main', url: 'https://github.com/mca014ashritha-design/wfh_stress_demo.git'
-            }
-        }
-
         stage('Build Docker Image') {
             steps {
                 bat "docker build -t %DOCKER_IMAGE%:%DOCKER_TAG% ."
@@ -22,7 +16,7 @@ pipeline {
         stage('Docker Login') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    bat "echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin"
+                    bat '@echo off\r\necho|set /p="%DOCKER_PASS%" | docker login -u "%DOCKER_USER%" --password-stdin'
                 }
             }
         }
