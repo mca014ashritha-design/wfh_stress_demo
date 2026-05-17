@@ -33,6 +33,7 @@ APP_TIMEZONE = os.environ.get("APP_TIMEZONE", "Asia/Kolkata")
 AUTO_WEEKLY_REPORTS = os.environ.get("AUTO_WEEKLY_REPORTS", "true").lower() == "true"
 WEEKLY_REPORT_DAY = int(os.environ.get("WEEKLY_REPORT_DAY", "6"))  # Monday=0, Sunday=6
 WEEKLY_REPORT_HOUR = int(os.environ.get("WEEKLY_REPORT_HOUR", "9"))
+WEEKLY_REPORT_MINUTE = int(os.environ.get("WEEKLY_REPORT_MINUTE", "0"))
 WEEKLY_REPORT_CHECK_SECONDS = int(os.environ.get("WEEKLY_REPORT_CHECK_SECONDS", "1800"))
 
 app = Flask(__name__, template_folder="../frontend/templates", static_folder="../frontend/static")
@@ -192,12 +193,13 @@ def send_automatic_weekly_reports(now=None):
 def weekly_report_scheduler_loop():
     print(
         f"Automatic weekly reports enabled: day={WEEKLY_REPORT_DAY}, "
-        f"hour={WEEKLY_REPORT_HOUR}, timezone={APP_TIMEZONE}"
+        f"time={WEEKLY_REPORT_HOUR:02d}:{WEEKLY_REPORT_MINUTE:02d}, timezone={APP_TIMEZONE}"
     )
     while True:
         try:
             now = local_now()
-            if now.weekday() == WEEKLY_REPORT_DAY and now.hour >= WEEKLY_REPORT_HOUR:
+            scheduled_time_reached = (now.hour, now.minute) >= (WEEKLY_REPORT_HOUR, WEEKLY_REPORT_MINUTE)
+            if now.weekday() == WEEKLY_REPORT_DAY and scheduled_time_reached:
                 result = send_automatic_weekly_reports(now)
                 print(f"Automatic weekly report check complete: {result}")
         except Exception as exc:
