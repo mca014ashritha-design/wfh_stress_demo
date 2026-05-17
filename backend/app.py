@@ -522,12 +522,23 @@ def index():
 @app.route("/result")
 @login_required
 def result():
+    latest = predictions_col.find_one(
+        {"user_id": session.get("user_id")},
+        {"_id": 0},
+        sort=[("date", -1)],
+    )
+    if latest:
+        latest["color"] = latest.get("stress_color", latest.get("color", "#2563eb"))
+        latest["saved"] = True
+        latest["email_sent"] = latest.get("high_alert_email_sent", False)
+        latest["email_message"] = latest.get("high_alert_email_message", "")
     return render_template(
         "result.html",
         low_t=LOW_T,
         mod_t=MOD_T,
         username=session.get("username"),
         employee_id=current_employee_id(),
+        latest_result=latest,
     )
 
 @app.route("/dashboard")

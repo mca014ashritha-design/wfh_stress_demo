@@ -33,5 +33,16 @@ function renderPrediction(data) {
   }
 }
 
+function readServerPrediction() {
+  const node = document.getElementById("serverPrediction");
+  if (!node || !node.textContent.trim() || node.textContent.trim() === "null") return null;
+  try {
+    return JSON.parse(node.textContent);
+  } catch (_error) {
+    return null;
+  }
+}
+
 const stored = sessionStorage.getItem("latestPrediction");
-renderPrediction(stored ? JSON.parse(stored) : null);
+const storedPrediction = stored ? JSON.parse(stored) : null;
+renderPrediction(storedPrediction || readServerPrediction());
