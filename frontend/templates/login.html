@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Login | Personal Stress Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+  <main class="auth-container">
+    <section class="card auth-card">
+      <h1>Login</h1>
+      <p>Sign in to access your private stress prediction page.</p>
+
+      {% if error %}
+        <p class="error">{{ error }}</p>
+      {% endif %}
+
+      <form class="auth-form" method="post" action="{{ url_for('login') }}">
+        <label>Username<input name="username" type="text" required autofocus></label>
+        <label>Password<input name="password" type="password" required></label>
+        <button type="submit">Login</button>
+      </form>
+
+      <p class="auth-link">New user? <a href="{{ url_for('register') }}">Create account</a></p>
+    </section>
+  </main>
+</body>
+</html>
+

@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Dashboard | Personal Stress Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+  <header class="topbar app-topbar">
+    <div class="brand-block">
+      <strong>Personal Stress Tracker</strong>
+      <span>{{ username }}</span>
+    </div>
+    <nav class="nav-links">
+      <a href="{{ url_for('index') }}">Prediction</a>
+      <a class="active" href="{{ url_for('dashboard') }}">Dashboard</a>
+      <a href="{{ url_for('logout') }}">Logout</a>
+    </nav>
+  </header>
+
+  <main class="dashboard-shell">
+    <section class="dashboard-hero">
+      <div>
+        <p class="eyebrow">Health Monitoring</p>
+        <h1>Your Private Dashboard</h1>
+        <p>Track only your saved predictions, stress movement, and recent recommendation drivers.</p>
+        <p class="disclaimer">The predicted stress score is for informational purposes only and not a clinical diagnosis. Please consult a healthcare professional for medical advice.</p>
+      </div>
+      <a class="primary-link" href="{{ url_for('index') }}">New Prediction</a>
+    </section>
+
+    <section class="metric-grid">
+      <article class="metric-card">
+        <span>Total Predictions</span>
+        <strong id="totalPredictions">0</strong>
+        <p>Saved records</p>
+      </article>
+      <article class="metric-card">
+        <span>Average Score</span>
+        <strong id="averageScore">0.00</strong>
+        <p>Last 30 records</p>
+      </article>
+      <article class="metric-card">
+        <span>Latest Label</span>
+        <strong id="latestLabel">--</strong>
+        <p id="latestDate">No prediction yet</p>
+      </article>
+      <article class="metric-card">
+        <span>Trend</span>
+        <strong id="trendValue">--</strong>
+        <p id="trendDelta">Waiting for data</p>
+      </article>
+    </section>
+
+
+    <section class="weekly-report">
+      <article class="weekly-summary-card">
+        <p class="eyebrow">Weekly Trend Report</p>
+        <h2 id="weeklyTrendTitle">Waiting for weekly data</h2>
+        <p id="weeklyTrendText">Add predictions across the week to see your personal trend.</p>
+        <div class="weekly-stat-row">
+          <div><span>This Week</span><strong id="thisWeekAvg">0.00</strong></div>
+          <div><span>Last Week</span><strong id="lastWeekAvg">0.00</strong></div>
+          <div><span>Change</span><strong id="weeklyDelta">0.00</strong></div>
+        </div>
+      </article>
+      <article class="weekly-tip-card">
+        <span>Weekly Tip</span>
+        <p id="weeklyTip">Your weekly tip will appear after you add predictions.</p>
+        <div class="focus-tags" id="focusAreas"></div>
+        <button class="email-report-btn" id="emailWeeklyBtn" type="button">Email Weekly Report</button>
+        <p class="email-status" id="weeklyEmailStatus"></p>
+      </article>
+      <article class="weekly-chart-card">
+        <div class="panel-heading">
+          <h2>7-Day View</h2>
+        </div>
+        <div class="weekly-bars" id="weeklyBars"></div>
+      </article>
+    </section>
+    <section class="dashboard-grid">
+      <article class="panel-card wide-card">
+        <div class="panel-heading">
+          <div>
+            <h2>Recent Stress Scores</h2>
+            <p>Last 14 saved predictions</p>
+          </div>
+        </div>
+        <div class="bar-chart" id="scoreChart"></div>
+      </article>
+
+      <article class="panel-card">
+        <div class="panel-heading">
+          <h2>Label Distribution</h2>
+        </div>
+        <div class="distribution" id="distributionBox"></div>
+      </article>
+
+      <article class="panel-card">
+        <div class="panel-heading">
+          <h2>Top Drivers</h2>
+        </div>
+        <div class="drivers" id="driverBox"></div>
+      </article>
+
+      <article class="panel-card wide-card">
+        <div class="panel-heading">
+          <div>
+            <h2>Recent Records</h2>
+            <p>Score, label, driver, and tip</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Score</th>
+                <th>Label</th>
+                <th>Driver</th>
+                <th>Tip</th>
+              </tr>
+            </thead>
+            <tbody id="recordsBody"></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>
+
+
+
+

@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Prediction | Personal Stress Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+  <header class="topbar app-topbar">
+    <div class="brand-block">
+      <strong>Personal Stress Tracker</strong>
+      <span>{{ username }}</span>
+    </div>
+    <nav class="nav-links">
+      <a class="active" href="{{ url_for('index') }}">Prediction</a>
+      <a href="{{ url_for('dashboard') }}">Dashboard</a>
+      <a href="{{ url_for('logout') }}">Logout</a>
+    </nav>
+  </header>
+
+  <main class="container enhanced-container">
+    <section class="card form-card checkin-card">
+      <div class="form-hero-row">
+        <div>
+          <p class="eyebrow">Daily Check-In</p>
+          <h1>How was your workday?</h1>
+          <p class="muted">Submit one private stress check-in per date. Sliders update live, and weekday is calculated from the selected date.</p>
+          <p class="disclaimer">The predicted stress score is for informational purposes only and not a clinical diagnosis. Please consult a healthcare professional for medical advice.</p>
+        </div>
+        <div class="date-chip">
+          <span id="weekdayDisplay">Monday</span>
+          <strong id="datePretty">Today</strong>
+        </div>
+      </div>
+
+      <div class="submission-banner" id="submissionBanner">
+        <strong>Ready for today</strong>
+        <span>You can submit one check-in for this date.</span>
+      </div>
+
+      <form id="stressForm">
+        <input name="employee_id" type="hidden" value="{{ employee_id }}">
+        <input name="weekday" id="weekdayInput" type="hidden" value="0">
+
+        <section class="input-group full-row">
+          <div class="group-heading">
+            <span>01</span>
+            <div>
+              <h2>Date</h2>
+              <p>Weekday is automatic</p>
+            </div>
+          </div>
+          <label>Date<input name="date" id="dateInput" type="date" required></label>
+        </section>
+
+        <section class="input-group">
+          <div class="group-heading">
+            <span>02</span>
+            <div>
+              <h2>Recovery</h2>
+              <p>Sleep, movement, hydration</p>
+            </div>
+          </div>
+          <label class="metric-field"><span>Sleep Hours</span><input name="sleep_hours" type="number" min="0" max="14" step="0.1" value="7" required></label>
+          <label class="metric-field"><span>Exercise Minutes</span><input name="exercise" type="number" min="0" max="240" step="5" value="30" required></label>
+          <label class="metric-field"><span>Breaks Per Day</span><input name="breaks_per_day" type="number" min="0" max="12" step="1" value="3" required></label>
+          <label class="metric-field"><span>Water Glasses</span><input name="water_intake" type="number" min="0" max="20" step="1" value="8" required></label>
+        </section>
+
+        <section class="input-group">
+          <div class="group-heading">
+            <span>03</span>
+            <div>
+              <h2>Workload</h2>
+              <p>Hours, meetings, backlog</p>
+            </div>
+          </div>
+          <label class="metric-field"><span>Work Hours</span><input name="daily_work_hours" type="number" min="0" max="16" step="0.1" value="8" required></label>
+          <label class="metric-field"><span>Meetings</span><input name="meetings_per_day" type="number" min="0" max="15" step="1" value="3" required></label>
+          <label class="metric-field"><span>Pending Tasks</span><input name="pending_task" type="number" min="0" max="40" step="1" value="5" required></label>
+        </section>
+
+        <section class="input-group full-row">
+          <div class="group-heading">
+            <span>04</span>
+            <div>
+              <h2>Environment</h2>
+              <p>Digital load and home setup</p>
+            </div>
+          </div>
+          <div class="mini-grid">
+            <label class="metric-field"><span>Screen Time</span><input name="daily_screen_time_hrs" type="number" min="0" max="18" step="0.1" value="8" required></label>
+            <label class="metric-field"><span>Home Distractions</span><input name="home_distractions_score" type="number" min="1" max="10" step="1" value="4" required></label>
+            <label class="metric-field"><span>Internet Stability</span><input name="internet_stability_score" type="number" min="1" max="10" step="1" value="7" required></label>
+            <label class="metric-field"><span>Caffeine Cups</span><input name="caffeine_intake" type="number" min="0" max="12" step="1" value="2" required></label>
+          </div>
+        </section>
+
+        <button type="submit" id="submitBtn">Predict Stress</button>
+      </form>
+    </section>
+
+    <section class="card result result-card enhanced-result-card">
+      <p class="eyebrow">Prediction Output</p>
+      <h2>Today's Result</h2>
+
+      <div class="stress-gauge" id="stressGauge">
+        <div class="gauge-track">
+          <span></span>
+          <span></span>
+          <span></span>
+          <i id="gaugeNeedle"></i>
+        </div>
+        <div class="gauge-labels">
+          <span>Low</span><span>Moderate</span><span>High</span>
+        </div>
+      </div>
+
+      <div class="score" id="scoreBox">
+        <span>Stress Score</span>
+        <strong id="scoreValue">--</strong>
+        <b id="labelValue">Waiting</b>
+      </div>
+
+      <div class="tip-panel">
+        <h3>Health Tip</h3>
+        <p id="tipValue">Submit the form to see the tip.</p>
+      </div>
+      <p class="disclaimer result-disclaimer">The predicted stress score is for informational purposes only and not a clinical diagnosis. Please consult a healthcare professional for medical advice.</p>
+
+      <div class="result-meta">
+        <p><b>Tip Driver</b><span id="driverValue">--</span></p>
+        <p><b>Saved to MongoDB</b><span id="savedValue">--</span></p>
+        <p><b>Email Alert</b><span id="emailValue">Only for High stress</span></p>
+        <p><b>Thresholds</b><span>Low <= {{ low_t }} | Moderate <= {{ mod_t }}</span></p>
+      </div>
+      <a class="secondary-link" href="{{ url_for('dashboard') }}">View Dashboard</a>
+      <p class="error" id="errorBox"></p>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
+
