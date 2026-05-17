@@ -8,6 +8,9 @@ from functools import wraps
 import os
 import pickle
 import smtplib
+import threading
+import time
+from zoneinfo import ZoneInfo
 
 import numpy as np
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
@@ -26,6 +29,11 @@ SMTP_USER = os.environ.get("SMTP_USER", "")
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
 SMTP_FROM = os.environ.get("SMTP_FROM", SMTP_USER)
 SMTP_USE_TLS = os.environ.get("SMTP_USE_TLS", "true").lower() == "true"
+APP_TIMEZONE = os.environ.get("APP_TIMEZONE", "Asia/Kolkata")
+AUTO_WEEKLY_REPORTS = os.environ.get("AUTO_WEEKLY_REPORTS", "true").lower() == "true"
+WEEKLY_REPORT_DAY = int(os.environ.get("WEEKLY_REPORT_DAY", "6"))  # Monday=0, Sunday=6
+WEEKLY_REPORT_HOUR = int(os.environ.get("WEEKLY_REPORT_HOUR", "9"))
+WEEKLY_REPORT_CHECK_SECONDS = int(os.environ.get("WEEKLY_REPORT_CHECK_SECONDS", "1800"))
 
 app = Flask(__name__, template_folder="../frontend/templates", static_folder="../frontend/static")
 app.secret_key = SECRET_KEY
@@ -36,10 +44,12 @@ db = client[DB_NAME]
 users_col = db["users"]
 employees_col = db["employees"]
 predictions_col = db["predictions"]
+weekly_reports_col = db["weekly_reports"]
 users_col.create_index("username", unique=True)
 users_col.create_index("email", unique=True, sparse=True)
 employees_col.create_index("employee_id", unique=True)
 predictions_col.create_index([("employee_id", 1), ("date", 1)])
+weekly_reports_col.create_index([("user_id", 1), ("week_key", 1)], unique=True)
 try:
     predictions_col.create_index([("user_id", 1), ("date", 1)], unique=True)
 except OperationFailure as exc:
@@ -125,6 +135,81 @@ Personal Stress Tracker
 
 Disclaimer: The predicted stress score is for informational purposes only and not a clinical diagnosis. Please consult a healthcare professional for medical advice.
 """
+
+
+def local_now():
+    return datetime.now(ZoneInfo(APP_TIMEZONE))
+
+
+def weekly_report_key(now=None):
+    now = now or local_now()
+    week_start = (now.date() - timedelta(days=now.weekday())).isoformat()
+    return week_start
+
+
+def user_has_week_activity(user_id):
+    since = (local_now().date() - timedelta(days=6)).isoformat()
+    return predictions_col.count_documents({"user_id": user_id, "date": {"$gte": since}}, limit=1) > 0
+
+
+def send_automatic_weekly_reports(now=None):
+    now = now or local_now()
+    week_key = weekly_report_key(now)
+    sent_count = 0
+    skipped_count = 0
+
+    for user in users_col.find({"email": {"$exists": True, "$ne": ""}}):
+        user_id = str(user["_id"])
+        if weekly_reports_col.find_one({"user_id": user_id, "week_key": week_key}):
+            skipped_count += 1
+            continue
+        if not user_has_week_activity(user_id):
+            skipped_count += 1
+            continue
+
+        payload = dashboard_payload(user_id, int(user.get("employee_id", 1)))
+        weekly = payload["weekly"]
+        sent, message = send_email(
+            user.get("email"),
+            "Your Weekly Stress Report - Personal Stress Tracker",
+            weekly_report_email_body(user.get("username", "there"), weekly),
+        )
+        weekly_reports_col.insert_one({
+            "user_id": user_id,
+            "email": user.get("email"),
+            "week_key": week_key,
+            "sent": sent,
+            "message": message,
+            "weekly": weekly,
+            "created_at": datetime.utcnow(),
+        })
+        sent_count += 1
+
+    return {"sent_count": sent_count, "skipped_count": skipped_count, "week_key": week_key}
+
+
+def weekly_report_scheduler_loop():
+    print(
+        f"Automatic weekly reports enabled: day={WEEKLY_REPORT_DAY}, "
+        f"hour={WEEKLY_REPORT_HOUR}, timezone={APP_TIMEZONE}"
+    )
+    while True:
+        try:
+            now = local_now()
+            if now.weekday() == WEEKLY_REPORT_DAY and now.hour >= WEEKLY_REPORT_HOUR:
+                result = send_automatic_weekly_reports(now)
+                print(f"Automatic weekly report check complete: {result}")
+        except Exception as exc:
+            print(f"Automatic weekly report error: {exc}")
+        time.sleep(WEEKLY_REPORT_CHECK_SECONDS)
+
+
+def start_weekly_report_scheduler():
+    if not AUTO_WEEKLY_REPORTS:
+        print("Automatic weekly reports disabled.")
+        return
+    thread = threading.Thread(target=weekly_report_scheduler_loop, daemon=True)
+    thread.start()
 
 
 def weekly_report_email_body(username, weekly):
@@ -580,6 +665,7 @@ def model_info():
 
 
 if __name__ == "__main__":
+    start_weekly_report_scheduler()
     print(f"Personal Stress Tracker | MongoDB: {MONGO_URI} | Model: {MODEL_PATH}")
     app.run(debug=True, use_reloader=False, host="0.0.0.0", port=5000)
 
