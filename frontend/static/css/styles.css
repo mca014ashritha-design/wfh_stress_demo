@@ -687,6 +687,18 @@ th {
   opacity: 0.72;
 }
 
+
+.auto-report-note {
+  margin: 10px 0 0;
+  padding: 9px 10px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.4;
+}
 .email-status {
   min-height: 22px;
   margin: 10px 0 0;
