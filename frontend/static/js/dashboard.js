@@ -26,9 +26,12 @@ const labelColors = {
 };
 
 const trendCopy = {
-  WORSENING: "Your stress average increased this week.",
-  IMPROVING: "Your stress average improved this week.",
-  STABLE: "Your stress average stayed steady this week.",
+  WORSENING: "Your latest 7-day average increased compared with the previous 7 days.",
+  IMPROVING: "Your latest 7-day average improved compared with the previous 7 days.",
+  STABLE: "Your latest 7-day average stayed steady compared with the previous 7 days.",
+  CURRENT_WEEK: "Current 7-day average only. Previous 7-day comparison starts after 14 records.",
+  PARTIAL_WEEK: "Partial weekly average only. Full comparison starts after 14 records.",
+  INSUFFICIENT_DATA: "Add at least 3 records to generate a partial weekly average.",
   NO_DATA: "Add predictions to generate a weekly report.",
 };
 
@@ -103,14 +106,15 @@ function renderDrivers(driverCounts) {
 function renderWeekly(weekly) {
   const report = weekly || {};
   const trend = report.trend || "NO_DATA";
-  const delta = Number(report.delta || 0);
+  const comparisonReady = Boolean(report.comparison_ready);
+  const delta = comparisonReady ? Number(report.delta || 0) : null;
   const days = report.days || [];
 
   setText(weeklyTrendTitle, trend.replaceAll("_", " "));
   setText(weeklyTrendText, trendCopy[trend] || trendCopy.STABLE);
   setText(thisWeekAvg, Number(report.this_week_avg || 0).toFixed(2));
-  setText(lastWeekAvg, Number(report.last_week_avg || 0).toFixed(2));
-  setText(weeklyDelta, `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}`);
+  setText(lastWeekAvg, comparisonReady ? Number(report.last_week_avg || 0).toFixed(2) : "N/A");
+  setText(weeklyDelta, comparisonReady ? `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}` : "N/A");
   setText(weeklyTip, report.weekly_tip || "Add predictions to generate your weekly tip.");
 
   focusAreas.innerHTML = (report.focus_areas || []).length
@@ -175,7 +179,12 @@ async function loadDashboard() {
     }
 
     setText(trendValue, data.trend.replaceAll("_", " "));
-    setText(trendDelta, `Delta ${Number(data.delta || 0).toFixed(2)} vs previous week`);
+    setText(
+      trendDelta,
+      data.comparison_ready
+        ? `Delta ${Number(data.delta || 0).toFixed(2)} vs previous 7 days`
+        : "Previous 7-day comparison starts after 14 records"
+    );
     renderWeekly(data.weekly);
 
     if (!data.total) {

@@ -147,9 +147,10 @@ def weekly_report_key(now=None):
     return week_start
 
 
-def user_has_week_activity(user_id):
-    since = (local_now().date() - timedelta(days=6)).isoformat()
-    return predictions_col.count_documents({"user_id": user_id, "date": {"$gte": since}}, limit=1) > 0
+def current_week_record_count(user_id, now=None):
+    now = now or local_now()
+    week_start = (now.date() - timedelta(days=now.weekday())).isoformat()
+    return predictions_col.count_documents({"user_id": user_id, "date": {"$gte": week_start}})
 
 
 def send_automatic_weekly_reports(now=None):
@@ -163,7 +164,7 @@ def send_automatic_weekly_reports(now=None):
         if weekly_reports_col.find_one({"user_id": user_id, "week_key": week_key}):
             skipped_count += 1
             continue
-        if not user_has_week_activity(user_id):
+        if current_week_record_count(user_id, now) < 3:
             skipped_count += 1
             continue
 
@@ -215,18 +216,25 @@ def start_weekly_report_scheduler():
 def weekly_report_email_body(username, weekly):
     focus = weekly.get("focus_areas") or ["general"]
     focus_text = ", ".join(str(item).replace("_", " ") for item in focus)
+    comparison_ready = bool(weekly.get("comparison_ready"))
+    last_week_avg = weekly.get("last_week_avg") if comparison_ready else "N/A"
+    delta = weekly.get("delta") if comparison_ready else "N/A"
+    record_count = weekly.get("record_count", len(weekly.get("days", [])))
     return f"""Hi {username},
 
 Here is your private weekly stress report.
 
+Recorded days: {record_count}
 This week average: {weekly.get("this_week_avg", 0)}
-Last week average: {weekly.get("last_week_avg", 0)}
-Change: {weekly.get("delta", 0)}
+Last week average: {last_week_avg}
+Change: {delta}
 Trend: {weekly.get("trend", "NO_DATA")}
 Focus areas: {focus_text}
 
 Weekly tip:
 {weekly.get("weekly_tip", "Add more daily predictions to generate a weekly tip.")}
+
+Note: Initial reports show a partial weekly average only. Full comparison with the previous 7 days starts after 14 records are available.
 
 This report is private to your account.
 
@@ -335,12 +343,14 @@ def dashboard_payload(user_id, employee_id):
 
     empty_weekly = {
         "this_week_avg": 0,
-        "last_week_avg": 0,
-        "delta": 0,
+        "last_week_avg": None,
+        "delta": None,
         "trend": "NO_DATA",
         "weekly_tip": "Add a few daily predictions to generate your weekly stress report.",
         "focus_areas": [],
         "days": [],
+        "record_count": 0,
+        "comparison_ready": False,
     }
 
     if not docs:
@@ -351,7 +361,8 @@ def dashboard_payload(user_id, employee_id):
             "latest": None,
             "distribution": {"Low": 0, "Moderate": 0, "High": 0},
             "trend": "NO_DATA",
-            "delta": 0,
+            "delta": None,
+            "comparison_ready": False,
             "history": [],
             "driver_counts": {},
             "weekly": empty_weekly,
@@ -366,14 +377,27 @@ def dashboard_payload(user_id, employee_id):
         driver = doc.get("tip_driver", "general")
         driver_counts[driver] = driver_counts.get(driver, 0) + 1
 
-    recent = scores[-7:]
-    previous = scores[-14:-7]
-    recent_avg = float(np.mean(recent)) if recent else 0
-    previous_avg = float(np.mean(previous)) if previous else recent_avg
-    delta = recent_avg - previous_avg
-    trend = "WORSENING" if delta > 0.35 else ("IMPROVING" if delta < -0.35 else "STABLE")
-
+    total_records = len(scores)
     weekly_docs = docs[-7:]
+    weekly_scores = [float(doc["stress_score"]) for doc in weekly_docs]
+    recent_avg = float(np.mean(weekly_scores)) if weekly_scores else 0
+    previous_avg = None
+    delta = None
+    comparison_ready = False
+
+    if total_records < 3:
+        trend = "INSUFFICIENT_DATA"
+    elif total_records < 7:
+        trend = "PARTIAL_WEEK"
+    elif total_records < 14:
+        trend = "CURRENT_WEEK"
+    else:
+        previous = scores[-14:-7]
+        previous_avg = float(np.mean(previous))
+        delta = recent_avg - previous_avg
+        comparison_ready = True
+        trend = "WORSENING" if delta > 0.35 else ("IMPROVING" if delta < -0.35 else "STABLE")
+
     weekly_driver_counts = {}
     for doc in weekly_docs:
         driver = doc.get("tip_driver", "general")
@@ -381,19 +405,24 @@ def dashboard_payload(user_id, employee_id):
     focus_areas = [driver for driver, _ in sorted(weekly_driver_counts.items(), key=lambda item: item[1], reverse=True)[:3]]
 
     weekly_tips = {
-        "WORSENING": "Your weekly stress is increasing. This week, focus on sleep, short breaks, and a fixed logoff time.",
-        "IMPROVING": "Your weekly stress is improving. Continue the habits that helped: sleep on time, move daily, and take planned breaks.",
-        "STABLE": "Your weekly stress is stable. Choose one simple goal for next week: a walk, a focus block, or an earlier logoff time.",
+        "WORSENING": "Your weekly stress is increasing compared with the previous 7 days. This week, focus on sleep, short breaks, and a fixed logoff time.",
+        "IMPROVING": "Your weekly stress is improving compared with the previous 7 days. Continue the habits that helped: sleep on time, move daily, and take planned breaks.",
+        "STABLE": "Your weekly stress is stable compared with the previous 7 days. Choose one simple goal for next week: a walk, a focus block, or an earlier logoff time.",
+        "CURRENT_WEEK": "This is your current 7-day average. Full comparison with the previous 7 days will start after 14 records are available.",
+        "PARTIAL_WEEK": f"This is a partial weekly average based on {total_records} recorded days. Full trend comparison starts after 14 records are available.",
+        "INSUFFICIENT_DATA": "Add at least 3 daily records to generate a useful partial weekly average.",
         "NO_DATA": "Add a few daily predictions to generate your weekly stress report and personalised weekly tips.",
     }
     weekly = {
         "this_week_avg": round(float(recent_avg), 2),
-        "last_week_avg": round(float(previous_avg), 2),
-        "delta": round(float(delta), 2),
+        "last_week_avg": round(float(previous_avg), 2) if previous_avg is not None else None,
+        "delta": round(float(delta), 2) if delta is not None else None,
         "trend": trend,
         "weekly_tip": weekly_tips.get(trend, weekly_tips["STABLE"]),
         "focus_areas": focus_areas,
         "days": weekly_docs,
+        "record_count": total_records,
+        "comparison_ready": comparison_ready,
     }
 
     return {
@@ -403,7 +432,8 @@ def dashboard_payload(user_id, employee_id):
         "latest": docs[-1],
         "distribution": distribution,
         "trend": trend,
-        "delta": round(float(delta), 2),
+        "delta": round(float(delta), 2) if delta is not None else None,
+        "comparison_ready": comparison_ready,
         "history": docs[-14:],
         "driver_counts": driver_counts,
         "weekly": weekly,
