@@ -17,6 +17,7 @@ from flask import Flask, jsonify, redirect, render_template, request, session, u
 from flask_cors import CORS
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError, OperationFailure
+from bson.objectid import ObjectId
 from werkzeug.security import check_password_hash, generate_password_hash
 
 MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017/")
@@ -46,11 +47,13 @@ users_col = db["users"]
 employees_col = db["employees"]
 predictions_col = db["predictions"]
 weekly_reports_col = db["weekly_reports"]
+trusted_contacts_col = db["trusted_contacts"]
 users_col.create_index("username", unique=True)
 users_col.create_index("email", unique=True, sparse=True)
 employees_col.create_index("employee_id", unique=True)
 predictions_col.create_index([("employee_id", 1), ("date", 1)])
 weekly_reports_col.create_index([("user_id", 1), ("week_key", 1)], unique=True)
+trusted_contacts_col.create_index([("user_id", 1), ("email", 1)])
 try:
     predictions_col.create_index([("user_id", 1), ("date", 1)], unique=True)
 except OperationFailure as exc:
@@ -120,17 +123,106 @@ def send_email(to_email, subject, body):
 
 
 
+
+
+def consented_contacts(user_id, notify_field):
+    return list(trusted_contacts_col.find({
+        "user_id": user_id,
+        "consent_given": True,
+        notify_field: True,
+        "email": {"$exists": True, "$ne": ""},
+    }))
+
+
+def contact_high_alert_body(username, contact, date, score, label):
+    share_level = contact.get("share_level", "minimal")
+    relationship = contact.get("relationship", "trusted contact")
+    base = f"""Hi {contact.get('name', 'there')},
+
+{username} has consented to share stress support alerts with you as their {relationship}.
+
+A high stress level was detected on {date}.
+"""
+    if share_level == "summary":
+        details = f"\nShared summary:\nLabel: {label}\n"
+    elif share_level == "full":
+        details = f"\nShared details:\nScore: {score}\nLabel: {label}\n"
+    else:
+        details = "\nShared details are limited by the user's privacy settings.\n"
+    return base + details + """
+Please check in with them if appropriate.
+
+Personalised tips are not shared with trusted contacts.
+
+Personal Stress Tracker
+
+Disclaimer: The predicted stress score is for informational purposes only and not a clinical diagnosis. Please consult a healthcare professional for medical advice.
+"""
+
+
+def contact_weekly_report_body(username, contact, weekly):
+    share_level = contact.get("share_level", "minimal")
+    relationship = contact.get("relationship", "trusted contact")
+    trend = weekly.get("trend", "NO_DATA")
+    record_count = weekly.get("record_count", len(weekly.get("days", [])))
+    base = f"""Hi {contact.get('name', 'there')},
+
+{username} has consented to share weekly stress summaries with you as their {relationship}.
+
+Weekly stress summary is available.
+"""
+    if share_level == "summary":
+        details = f"\nShared summary:\nRecorded days: {record_count}\nTrend: {trend}\n"
+    elif share_level == "full":
+        comparison_ready = bool(weekly.get("comparison_ready"))
+        last_week_avg = weekly.get("last_week_avg") if comparison_ready else "N/A"
+        delta = weekly.get("delta") if comparison_ready else "N/A"
+        details = f"\nShared details:\nRecorded days: {record_count}\nCurrent average: {weekly.get('this_week_avg', 0)}\nPrevious average: {last_week_avg}\nChange: {delta}\nTrend: {trend}\n"
+    else:
+        details = "\nShared details are limited by the user's privacy settings.\n"
+    return base + details + """
+Please check in with them if appropriate.
+
+Personalised tips are not shared with trusted contacts.
+
+Personal Stress Tracker
+
+Disclaimer: The predicted stress score is for informational purposes only and not a clinical diagnosis. Please consult a healthcare professional for medical advice.
+"""
+
+
+def send_contact_emails(user_id, notify_field, subject, body_builder):
+    results = []
+    for contact in consented_contacts(user_id, notify_field):
+        sent, message = send_email(contact.get("email"), subject, body_builder(contact))
+        results.append({
+            "contact_id": str(contact.get("_id")),
+            "email": contact.get("email"),
+            "relationship": contact.get("relationship"),
+            "share_level": contact.get("share_level", "minimal"),
+            "sent": sent,
+            "message": message,
+        })
+    return results
+
 def send_high_alert_in_background(user_id, date, to_email, username, score, label, tip):
     sent, message = send_email(
         to_email,
         "High Stress Alert - Personal Stress Tracker",
         high_stress_email_body(username, date, score, label, tip),
     )
+    contact_results = send_contact_emails(
+        user_id,
+        "notify_high_alert",
+        "Support Alert - Personal Stress Tracker",
+        lambda contact: contact_high_alert_body(username, contact, date, score, label),
+    )
     predictions_col.update_one(
         {"user_id": user_id, "date": date},
         {"$set": {
             "high_alert_email_sent": sent,
             "high_alert_email_message": message,
+            "trusted_contact_high_alerts": contact_results,
             "high_alert_email_checked_at": datetime.utcnow(),
         }},
     )
@@ -199,10 +291,17 @@ def send_automatic_weekly_reports(now=None):
 
         payload = dashboard_payload(user_id, int(user.get("employee_id", 1)))
         weekly = payload["weekly"]
+        username = user.get("username", "there")
         sent, message = send_email(
             user.get("email"),
             "Your Weekly Stress Report - Personal Stress Tracker",
-            weekly_report_email_body(user.get("username", "there"), weekly),
+            weekly_report_email_body(username, weekly),
+        )
+        contact_results = send_contact_emails(
+            user_id,
+            "notify_weekly_report",
+            "Weekly Support Summary - Personal Stress Tracker",
+            lambda contact: contact_weekly_report_body(username, contact, weekly),
         )
         weekly_reports_col.insert_one({
             "user_id": user_id,
@@ -210,6 +309,7 @@ def send_automatic_weekly_reports(now=None):
             "week_key": week_key,
             "sent": sent,
             "message": message,
+            "trusted_contact_weekly_reports": contact_results,
             "weekly": weekly,
             "created_at": datetime.utcnow(),
         })
@@ -569,6 +669,71 @@ def result():
         latest_result=latest,
     )
 
+
+@app.route("/sharing", methods=["GET", "POST"])
+@login_required
+def sharing():
+    user_id = session.get("user_id")
+    error = None
+    success = None
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        email = request.form.get("email", "").strip().lower()
+        relationship = request.form.get("relationship", "Trusted Contact").strip()
+        share_level = request.form.get("share_level", "minimal")
+        notify_high_alert = request.form.get("notify_high_alert") == "on"
+        notify_weekly_report = request.form.get("notify_weekly_report") == "on"
+        consent_given = request.form.get("consent_given") == "on"
+
+        if share_level not in {"minimal", "summary", "full"}:
+            share_level = "minimal"
+        if not name or not email:
+            error = "Contact name and email are required."
+        elif not consent_given:
+            error = "Consent is required before sharing alerts or reports."
+        elif not notify_high_alert and not notify_weekly_report:
+            error = "Choose at least one sharing option."
+        else:
+            now = datetime.utcnow()
+            trusted_contacts_col.insert_one({
+                "user_id": user_id,
+                "name": name,
+                "email": email,
+                "relationship": relationship,
+                "notify_high_alert": notify_high_alert,
+                "notify_weekly_report": notify_weekly_report,
+                "notify_escalation_alert": False,
+                "share_level": share_level,
+                "share_tips": False,
+                "consent_given": True,
+                "created_at": now,
+                "updated_at": now,
+            })
+            success = "Trusted contact saved. Personalised tips will still be shared only with you."
+
+    contacts = list(trusted_contacts_col.find({"user_id": user_id}).sort("created_at", -1))
+    for contact in contacts:
+        contact["id"] = str(contact.pop("_id"))
+    return render_template(
+        "sharing.html",
+        username=session.get("username"),
+        contacts=contacts,
+        error=error,
+        success=success,
+    )
+
+
+@app.route("/sharing/delete/<contact_id>", methods=["POST"])
+@login_required
+def delete_sharing_contact(contact_id):
+    try:
+        object_id = ObjectId(contact_id)
+    except Exception:
+        return redirect(url_for("sharing"))
+    trusted_contacts_col.delete_one({"_id": object_id, "user_id": session.get("user_id")})
+    return redirect(url_for("sharing"))
+
 @app.route("/dashboard")
 @login_required
 def dashboard():
@@ -723,12 +888,24 @@ def email_weekly_report():
     payload = dashboard_payload(session.get("user_id"), current_employee_id())
     weekly = payload["weekly"]
     to_email = user.get("email") if user else session.get("email")
+    username = session.get("username", "there")
     sent, message = send_email(
         to_email,
         "Your Weekly Stress Report - Personal Stress Tracker",
-        weekly_report_email_body(session.get("username", "there"), weekly),
+        weekly_report_email_body(username, weekly),
     )
-    return jsonify({"sent": sent, "message": message, "weekly": weekly})
+    contact_results = send_contact_emails(
+        session.get("user_id"),
+        "notify_weekly_report",
+        "Weekly Support Summary - Personal Stress Tracker",
+        lambda contact: contact_weekly_report_body(username, contact, weekly),
+    )
+    return jsonify({
+        "sent": sent,
+        "message": message,
+        "trusted_contact_reports": contact_results,
+        "weekly": weekly,
+    })
 
 
 @app.route("/api/history/<int:employee_id>")

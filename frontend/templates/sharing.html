@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Consent & Sharing | Personal Stress Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+  <header class="topbar app-topbar">
+    <div class="brand-block">
+      <strong>Personal Stress Tracker</strong>
+      <span>{{ username }}</span>
+    </div>
+    <nav class="nav-links">
+      <a href="{{ url_for('index') }}">Prediction</a>
+      <a href="{{ url_for('dashboard') }}">Dashboard</a>
+      <a class="active" href="{{ url_for('sharing') }}">Sharing</a>
+      <a href="{{ url_for('logout') }}">Logout</a>
+    </nav>
+  </header>
+
+  <main class="sharing-shell">
+    <section class="dashboard-hero sharing-hero">
+      <div>
+        <p class="eyebrow">Consent & Sharing</p>
+        <h1>Trusted Support Contacts</h1>
+        <p>You control who receives alerts or weekly summaries. Personalised tips are always sent only to you.</p>
+        <p class="disclaimer">The predicted stress score is for informational purposes only and not a clinical diagnosis. Please consult a healthcare professional for medical advice.</p>
+      </div>
+    </section>
+
+    {% if error %}<p class="error sharing-message">{{ error }}</p>{% endif %}
+    {% if success %}<p class="sharing-success sharing-message">{{ success }}</p>{% endif %}
+
+    <section class="sharing-grid">
+      <article class="card sharing-form-card">
+        <p class="eyebrow">Add Contact</p>
+        <h2>Consent Form</h2>
+        <form class="sharing-form" method="post">
+          <label>Contact Name<input name="name" type="text" required placeholder="Example: Dr. Sharma"></label>
+          <label>Email<input name="email" type="email" required placeholder="doctor@example.com"></label>
+          <label>Relationship
+            <select name="relationship">
+              <option>Doctor</option>
+              <option>Parent</option>
+              <option>Manager</option>
+              <option>HR / Higher Authority</option>
+              <option>Guardian</option>
+              <option>Friend</option>
+              <option>Trusted Contact</option>
+            </select>
+          </label>
+          <label>Share Level
+            <select name="share_level">
+              <option value="minimal">Minimal - support alert only</option>
+              <option value="summary">Summary - label or trend only</option>
+              <option value="full">Full - score, label, and trend, no tips</option>
+            </select>
+          </label>
+
+          <div class="consent-options">
+            <label><input name="notify_high_alert" type="checkbox" checked> Send high-stress alerts</label>
+            <label><input name="notify_weekly_report" type="checkbox"> Send weekly summaries</label>
+            <label class="consent-check"><input name="consent_given" type="checkbox" required> I consent to share only the selected stress information with this contact.</label>
+          </div>
+
+          <p class="privacy-note">Personalised tips, tip drivers, and detailed behaviour advice are never shared with trusted contacts.</p>
+          <button type="submit">Save Trusted Contact</button>
+        </form>
+      </article>
+
+      <article class="card sharing-list-card">
+        <p class="eyebrow">Saved Contacts</p>
+        <h2>Consent List</h2>
+        {% if contacts %}
+          <div class="contact-list">
+            {% for contact in contacts %}
+              <div class="contact-card">
+                <div>
+                  <strong>{{ contact.name }}</strong>
+                  <span>{{ contact.relationship }} | {{ contact.email }}</span>
+                </div>
+                <p>Share level: <b>{{ contact.share_level|capitalize }}</b></p>
+                <p>
+                  High alert: <b>{{ 'Yes' if contact.notify_high_alert else 'No' }}</b> | Weekly: <b>{{ 'Yes' if contact.notify_weekly_report else 'No' }}</b>
+                </p>
+                <p class="privacy-note">Tips shared: <b>No</b></p>
+                <form method="post" action="{{ url_for('delete_sharing_contact', contact_id=contact.id) }}">
+                  <button class="danger-btn" type="submit">Remove Consent</button>
+                </form>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="empty-state">No trusted contacts added yet. Alerts and weekly reports currently go only to you.</p>
+        {% endif %}
+      </article>
+    </section>
+  </main>
+</body>
+</html>
